@@ -243,15 +243,24 @@ export function useChat() {
 
         // Check if token was present but parsing failed (incomplete data)
         if (fullText.includes('BOOKING_CONFIRMED:')) {
-          // AI fired the token too early — show a recovery message
+          // AI fired the token too early — detect which fields are actually missing
           console.warn('⚠️ BOOKING_CONFIRMED detected but data incomplete, recovering...');
           removeBotMessage(streamId);
+
+          // Try to parse what we have to give a helpful recovery hint
+          let missingHint = 'a few details';
+          try {
+            const raw = fullText.slice(fullText.indexOf('BOOKING_CONFIRMED:') + 18).trim();
+            const jsonStr = raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
+            const partial = JSON.parse(jsonStr);
+            const fieldLabels = { name: 'your full name', phone: 'your phone number', date: 'the date', time: 'the time', guests: 'the number of guests' };
+            const missing = REQUIRED_BOOKING_FIELDS.filter(f => !partial[f] || String(partial[f]).trim() === '');
+            if (missing.length > 0) missingHint = missing.map(f => fieldLabels[f]).join(' and ');
+          } catch {}
+
           addBotMessage(
-            formatText(
-              "Almost there! Just to make sure I have everything — could you confirm your **phone number** so I can finalise the reservation? 📞"
-            )
+            formatText(`Almost there! Could you just confirm **${missingHint}** so I can finalise your reservation? 🥐`)
           );
-          setSuggestions(['📞 My number is...']);
           return;
         }
 
