@@ -85,6 +85,43 @@ export function useChat() {
     }
   };
 
+  // Build a human-readable confirmation summary from booking data,
+  // e.g. "Great, your table for 2 on Saturday 20 June at 8:00pm has been reserved. See you soon!"
+  const formatBookingSummary = (data) => {
+    if (!data) return null;
+
+    const guests = Number(data.guests);
+    const partySize = Number.isFinite(guests)
+      ? `table for ${guests} ${guests === 1 ? 'guest' : 'guests'}`
+      : 'table';
+
+    let dateLabel = data.date || '';
+    const parsedDate = data.date ? new Date(data.date) : null;
+    if (parsedDate && !isNaN(parsedDate.getTime())) {
+      const weekday = parsedDate.toLocaleDateString('en-US', { weekday: 'long' });
+      const dayMonth = parsedDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+      dateLabel = `${weekday} ${dayMonth}`;
+    }
+
+    let timeLabel = data.time || '';
+    if (timeLabel) {
+      const match = timeLabel.match(/^(\d{1,2}):(\d{2})$/);
+      if (match) {
+        let [, h, m] = match;
+        h = Number(h);
+        const suffix = h >= 12 ? 'pm' : 'am';
+        const hour12 = h % 12 === 0 ? 12 : h % 12;
+        timeLabel = `${hour12}:${m}${suffix}`;
+      }
+    }
+
+    const whenParts = [dateLabel, timeLabel ? `at ${timeLabel}` : ''].filter(Boolean).join(' ');
+
+    return `Great, your ${partySize}${whenParts ? ` on ${whenParts}` : ''} has been reserved${
+      data.name ? `, ${data.name}` : ''
+    }. See you soon!`;
+  };
+
   // Date context — injected into every request so the AI knows today's date
   const getDateContext = () => {
     const now  = new Date();
@@ -286,18 +323,21 @@ export function useChat() {
 
   // Post-booking actions
   const resetAfterBooking = useCallback(() => {
-    setBooking(null);
-    addBotMessage(
-      formatText(
-        "Wonderful! We can't wait to welcome you to **Le Petit Bistrot**. 🥐 Is there anything else I can help with — dietary needs, the menu, or directions?"
-      )
-    );
-    setSuggestions([
-      '🥗 Dietary options',
-      '🚇 Metro & directions',
-      '🍷 Tell me about the wine list',
-      '🎂 Birthday arrangements',
-    ]);
+    setBooking((current) => {
+      const summary = formatBookingSummary(current);
+
+      addBotMessage(
+        formatText(
+          summary
+            ? `${summary} We can't wait to welcome you to **Le Petit Bistrot**. 🥐`
+            : "Wonderful! We can't wait to welcome you to **Le Petit Bistrot**. 🥐"
+        )
+      );
+
+      return null;
+    });
+
+    setSuggestions([]);
   }, [addBotMessage]);
 
   const modifyBooking = useCallback(() => {
