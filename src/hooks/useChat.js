@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { MODEL,KNOWLEDGE_BASE } from '../constants/restaurant';
+import { MODEL } from '../constants/restaurant';
 import { sendChatRequest } from '../services/chatService';
 
 let _id = 0;
@@ -105,13 +105,6 @@ export function useChat() {
           model: MODEL,
           max_tokens: 600,
           stream: true,
-          system: [
-            {
-              type: 'text',
-              text: KNOWLEDGE_BASE,
-              cache_control: { type: 'ephemeral' },
-            },
-          ],
           messages: historyRef.current,
         });
 
