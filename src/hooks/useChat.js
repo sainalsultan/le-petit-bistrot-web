@@ -36,11 +36,7 @@ export function useChat() {
   };
 
   /**
-   * FIX #1: Robust BOOKING_CONFIRMED extraction.
-   * Handles edge cases:
-   *   - Text appearing before the token (AI added a summary)
-   *   - SUGGESTIONS appended after the JSON
-   *   - Multi-line responses where JSON is on its own line
+   * Multi-line responses where JSON is on its own line
    */
   const extractBookingConfirmed = (fullText) => {
     const TOKEN = 'BOOKING_CONFIRMED:';
@@ -66,7 +62,7 @@ export function useChat() {
     try {
       const data = JSON.parse(jsonStr);
 
-      // FIX #2: Validate all required fields are present and non-empty
+      // Validate all required fields are present and non-empty
       const missingFields = REQUIRED_BOOKING_FIELDS.filter(
         (f) => !data[f] || String(data[f]).trim() === ''
       );
@@ -83,6 +79,33 @@ export function useChat() {
       console.error('❌ Booking JSON parse failed:', e, '\nRaw JSON string:', jsonStr);
       return null;
     }
+  };
+
+  const CONTROL_TOKENS = ['BOOKING_CONFIRMED:', 'SUGGESTIONS:'];
+  const MAX_TOKEN_LEN = Math.max(...CONTROL_TOKENS.map((t) => t.length));
+  
+  const getSafeVisibleText = (fullText) => {
+    // full control token already arrived — cut at the earliest one
+    let cutIdx = -1;
+    for (const token of CONTROL_TOKENS) {
+      const idx = fullText.indexOf(token);
+      if (idx !== -1 && (cutIdx === -1 || idx < cutIdx)) cutIdx = idx;
+    }
+    if (cutIdx !== -1) {
+      return fullText.slice(0, cutIdx).trim();
+    }
+
+    // check if the tail could be the start of any control token —
+    // hold back that suffix until we know more
+    const tailLen = Math.min(MAX_TOKEN_LEN - 1, fullText.length);
+    for (let len = tailLen; len > 0; len--) {
+      const tail = fullText.slice(fullText.length - len);
+      if (CONTROL_TOKENS.some((token) => token.startsWith(tail))) {
+        return fullText.slice(0, fullText.length - len);
+      }
+    }
+
+    return fullText;
   };
 
   // Build a human-readable confirmation summary from booking data,
@@ -248,21 +271,16 @@ export function useChat() {
 
               if (delta) {
                 fullText += delta;
-                // Hide internal tokens from visible chat during streaming
-                const visible = fullText.includes('BOOKING_CONFIRMED:')
-                  ? fullText.slice(0, fullText.indexOf('BOOKING_CONFIRMED:')).trim()
-                  : fullText.includes('SUGGESTIONS:')
-                  ? fullText.slice(0, fullText.lastIndexOf('SUGGESTIONS:')).trim()
-                  : fullText;
-                updateBotMessage(streamId, formatText(visible), true);
+                const visible = getSafeVisibleText(fullText);
+                if (visible !== null) {
+                  updateBotMessage(streamId, formatText(visible), true);
+                }
               }
             } catch {}
           }
         }
 
         updateBotMessage(streamId, '', false);
-
-        // FIX #3: Use robust extractor instead of simple string split
         const bookingData = extractBookingConfirmed(fullText);
 
         if (bookingData) {
