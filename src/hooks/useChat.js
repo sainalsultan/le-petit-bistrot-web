@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { MODEL } from '../constants/restaurant';
-import { sendChatRequest } from '../services/chatService';
+import { sendChatRequest, sendBookingRequest } from '../services/chatService';
 
 let _id = 0;
 const uid = () => ++_id;
@@ -143,6 +143,17 @@ export function useChat() {
     return `Great, your ${partySize}${whenParts ? ` on ${whenParts}` : ''} has been reserved${
       data.name ? `, ${data.name}` : ''
     }. See you soon!`;
+  };
+
+  // Kirim booking yang sudah terkonfirmasi ke backend agar dicatat ke Google Sheets.
+  const saveBooking = async (bookingData) => {
+    try {
+      await sendBookingRequest(bookingData);
+    } catch (err) {
+      // Booking tetap dianggap sukses di sisi chat meski pencatatan gagal —
+      // hanya di-log supaya tidak mengganggu pengalaman user.
+      console.error('❌ Gagal menyimpan booking ke Google Sheets:', err.message);
+    }
   };
 
   // Date context — injected into every request so the AI knows today's date
@@ -291,6 +302,7 @@ export function useChat() {
             content: "I've confirmed your reservation — à bientôt!",
           });
           setBooking(bookingData);
+          saveBooking(bookingData);
           return;
         }
 
